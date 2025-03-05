@@ -29,7 +29,7 @@ public class CustomerHandler {
             }
             log.info("Successfully created customer(s)");
             return ResponseEntity.status(HttpStatus.CREATED).build();
-        }  catch (Exception ex) {
+        } catch (Exception ex) {
             log.error("Error has happened while creating customer --- ", ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         }
@@ -44,7 +44,7 @@ public class CustomerHandler {
             customerService.updateById(customer);
             log.info("Successfully updated customer with id {}", customerId);
             return ResponseEntity.ok().build();
-        }  catch (Exception ex) {
+        } catch (Exception ex) {
             log.error("Error has happened while updating customer --- ", ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         }
