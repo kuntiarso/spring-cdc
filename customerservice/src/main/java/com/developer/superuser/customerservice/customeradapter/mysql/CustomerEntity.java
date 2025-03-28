@@ -3,6 +3,9 @@ package com.developer.superuser.customerservice.customeradapter.mysql;
 import com.developer.superuser.customerservice.CustomerserviceConstants;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.SQLDelete;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -14,6 +17,9 @@ import java.time.LocalDateTime;
 @Table(name = CustomerserviceConstants.CUSTOMER_ENTITY)
 @Entity
 @EntityListeners(AuditingEntityListener.class)
+@SQLDelete(sql = CustomerserviceConstants.SOFT_DELETE_QUERY)
+@FilterDef(name = CustomerserviceConstants.SOFT_DELETE_FILTER)
+@Filter(name = CustomerserviceConstants.SOFT_DELETE_FILTER, condition = CustomerserviceConstants.SOFT_DELETE_FILTER_QUERY)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -70,6 +76,9 @@ public class CustomerEntity {
     @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @CreatedBy
     @Column(name = "created_by", length = 100)

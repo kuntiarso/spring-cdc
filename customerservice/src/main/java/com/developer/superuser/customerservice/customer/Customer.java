@@ -27,6 +27,7 @@ public class Customer {
     private String country;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime deletedAt;
     private String createdBy;
     private String updatedBy;
 }

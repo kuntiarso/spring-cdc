@@ -4,6 +4,9 @@ import com.developer.superuser.customerservice.v1_0_0.customerresource.CustomerH
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,8 +22,18 @@ public class CustomerController {
     }
 
     @PutMapping("{customerId}")
-    public ResponseEntity<?> update(@PathVariable("customerId") @NotBlank String customerId, @Valid @RequestBody CustomerRequest.Customer customerRequest) {
+    public ResponseEntity<?> update(@PathVariable("customerId") @NotBlank String customerId, @RequestBody CustomerRequest.Customer customerRequest) {
         return customerHandler.updateCustomer(customerId, customerRequest);
+    }
+
+    @DeleteMapping("{customerId}")
+    public ResponseEntity<?> delete(@PathVariable("customerId") @NotBlank String customerId) {
+        return customerHandler.deleteCustomer(customerId);
+    }
+
+    @PutMapping("{customerId}/restore")
+    public ResponseEntity<?> restore(@PathVariable("customerId") @NotBlank String customerId) {
+        return customerHandler.restoreCustomer(customerId);
     }
 
     @GetMapping("{customerId}")
@@ -28,8 +41,8 @@ public class CustomerController {
         return customerHandler.getCustomer(customerId);
     }
 
-    @DeleteMapping("{customerId}")
-    public ResponseEntity<?> delete(@PathVariable("customerId") @NotBlank String customerId) {
-        return customerHandler.deleteCustomer(customerId);
+    @GetMapping("page")
+    public ResponseEntity<?> getPage(@PageableDefault(sort = "customerId", direction = Sort.Direction.ASC) Pageable pageable) {
+        return customerHandler.getCustomerPageable(pageable);
     }
 }

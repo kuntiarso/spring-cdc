@@ -7,6 +7,8 @@ import com.developer.superuser.customerservice.customerresource.CustomerResponse
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.Validate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -40,12 +42,36 @@ public class CustomerHandler {
             log.info("Checking if customer with id {} exists", customerId);
             Validate.isTrue(customerService.isExist(Long.parseLong(customerId)), "Customer with id %s does not exist", customerId);
             log.info("Updating customer with id {}", customerId);
-            Customer customer = CustomerMapperResource.map(customerRequest).toBuilder().customerId(Long.parseLong(customerId)).build();
-            customerService.updateById(customer);
+            Customer customer = CustomerMapperResource.map(customerRequest);
+            customerService.updateById(Long.parseLong(customerId), customer);
             log.info("Successfully updated customer with id {}", customerId);
             return ResponseEntity.ok().build();
         } catch (Exception ex) {
             log.error("Error has happened while updating customer --- ", ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        }
+    }
+
+    public ResponseEntity<Void> deleteCustomer(String customerId) {
+        try {
+            log.info("Deleting customer with id --- {}", customerId);
+            customerService.deleteById(Long.parseLong(customerId));
+            log.info("Successfully deleted customer with id --- {}", customerId);
+            return ResponseEntity.ok().build();
+        } catch (Exception ex) {
+            log.error("Error has happened while deleting customer --- ", ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
+        }
+    }
+
+    public ResponseEntity<Void> restoreCustomer(String customerId) {
+        try {
+            log.info("Restoring deleted customer with id --- {}", customerId);
+            customerService.restoreById(Long.parseLong(customerId));
+            log.info("Successfully restored customer with id --- {}", customerId);
+            return ResponseEntity.ok().build();
+        } catch (Exception ex) {
+            log.error("Error has happened while restoring customer --- ", ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         }
     }
@@ -62,14 +88,14 @@ public class CustomerHandler {
         }
     }
 
-    public ResponseEntity<Void> deleteCustomer(String customerId) {
+    public ResponseEntity<Page<CustomerResponse>> getCustomerPageable(Pageable pageable) {
         try {
-            log.info("Deleting customer with id --- {}", customerId);
-            customerService.deleteById(Long.parseLong(customerId));
-            log.info("Successfully deleted customer with id --- {}", customerId);
-            return ResponseEntity.ok().build();
+            log.info("Retrieving customer pageable");
+            Page<CustomerResponse> result = customerService.getPageable(pageable).map(CustomerMapperResource::map);
+            log.info("Successfully retrieved customer pageable");
+            return ResponseEntity.ok().body(result);
         } catch (Exception ex) {
-            log.error("Error has happened while deleting customer --- ", ex);
+            log.error("Error has happened while getting customer page --- ", ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         }
     }
