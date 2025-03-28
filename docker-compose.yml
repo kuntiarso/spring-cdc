@@ -1,6 +1,6 @@
 services:
   cdc-mysql:
-    image: bitnami/mysql:8.4
+    image: bitnami/mysql:8.0
     container_name: cdc-mysql
     hostname: cdc-mysql
     restart: on-failure:3
@@ -10,109 +10,119 @@ services:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_USER=dbeaver
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=change_data_capture
+      - MYSQL_DATABASE=cdc
     volumes:
-      - cdc-mysql-data:/bitnami/mysql/data
+      - mysql-data:/bitnami/mysql/data
       - ./resources:/docker-entrypoint-initdb.d
     networks:
       - cdc-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p", "${MYSQL_ROOT_PASSWORD}"]
-      interval: 30s
-      retries: 3
-      start_period: 15s
-      timeout: 10s
+
+  cdc-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.2
+    container_name: cdc-elasticsearch
+    hostname: cdc-elasticsearch
+    restart: on-failure:3
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - cdc-network
+
+  cdc-kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.2
+    container_name: cdc-kibana
+    hostname: cdc-kibana
+    restart: on-failure:3
+    depends_on:
+      - cdc-elasticsearch
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://cdc-elasticsearch:9200
+    networks:
+      - cdc-network
+
+  cdc-zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.5
+    container_name: cdc-zookeeper
+    hostname: cdc-zookeeper
+    restart: on-failure:3
+    ports:
+      - "2181:2181"
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    networks:
+      - cdc-network
 
   cdc-kafka:
-    image: bitnami/kafka:3.9
+    image: confluentinc/cp-kafka:7.6.5
     container_name: cdc-kafka
     hostname: cdc-kafka
     restart: on-failure:3
+    depends_on:
+      - cdc-zookeeper
     ports:
-      - "9094:9094"
+      - "9092:9092"
+      - "9093:9093"
     environment:
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_KRAFT_CLUSTER_ID=${KAFKA_KRAFT_CLUSTER_ID}
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
-      - KAFKA_CFG_LISTENERS=CONTROLLER://:9092,INTERNAL://:9093,EXTERNAL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://cdc-kafka:9093,EXTERNAL://localhost:9094
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@cdc-kafka:9092
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=cdc-zookeeper:2181
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_LISTENERS=INTERNAL://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://cdc-kafka:9093,EXTERNAL://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
     volumes:
-      - cdc-kafka-data:/bitnami/kafka
+      - kafka-data:/var/lib/kafka/data
     networks:
       - cdc-network
-    healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "cdc-kafka:9093", "--list"]
-      interval: 30s
-      retries: 3
-      start_period: 15s
-      timeout: 10s
 
-  cdc-kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: cdc-kafka-ui
-    hostname: cdc-kafka-ui
+  cdc-kafka-connect:
+    image: confluentinc/cp-kafka-connect:7.6.5
+    container_name: cdc-kafka-connect
+    hostname: cdc-kafka-connect
     restart: on-failure:3
     depends_on:
       - cdc-kafka
-    ports:
-      - "9090:8080"
-    environment:
-      - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=cdc-kafka:9093
-    networks:
-      - cdc-network
-
-  cdc-debezium-connect:
-    image: debezium/connect:3.0.0.Final
-    container_name: cdc-debezium-connect
-    hostname: cdc-debezium-connect
-    restart: on-failure:3
-    depends_on:
       - cdc-mysql
-      - cdc-kafka
-      - cdc-kafka-ui
+      - cdc-elasticsearch
     ports:
       - "8083:8083"
     environment:
-      - BOOTSTRAP_SERVERS=cdc-kafka:9093
-      - GROUP_ID=1
-      - CONFIG_STORAGE_TOPIC=my_connect_configs
-      - OFFSET_STORAGE_TOPIC=my_connect_offsets
-      - STATUS_STORAGE_TOPIC=my_connect_statuses
-      - ENABLE_DEBEZIUM_SCRIPTING=true
-    networks:
-      - cdc-network
-
-  cdc-sink-connect:
-    image: confluentinc/cp-kafka-connect:7.9.0
-    container_name: cdc-sink-connect
-    hostname: cdc-sink-connect
-    restart: on-failure:3
-    depends_on:
-      - cdc-kafka
-      - cdc-kafka-ui
-    ports:
-      - "8084:8083"
-    environment:
       - CONNECT_BOOTSTRAP_SERVERS=cdc-kafka:9093
-      - CONNECT_GROUP_ID=2
-      - CONNECT_CONFIG_STORAGE_TOPIC=my_connect_configs
-      - CONNECT_OFFSET_STORAGE_TOPIC=my_connect_offsets
-      - CONNECT_STATUS_STORAGE_TOPIC=my_connect_statuses
+      - CONNECT_GROUP_ID=kafka-connect-group
+      - CONNECT_REST_PORT=8083
+      - CONNECT_REST_ADVERTISED_HOST_NAME=localhost
+      - CONNECT_CONFIG_STORAGE_TOPIC=docker-connect-configs
       - CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_OFFSET_STORAGE_TOPIC=docker-connect-offsets
       - CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1
+      - CONNECT_STATUS_STORAGE_TOPIC=docker-connect-status
       - CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1
       - CONNECT_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
       - CONNECT_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
       - CONNECT_INTERNAL_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
       - CONNECT_INTERNAL_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
-      - CONNECT_REST_ADVERTISED_HOST_NAME=localhost
-      - CONNECT_REST_PORT=8084
-      - CONNECT_PLUGIN_PATH=/usr/share/java,/etc/kafka-connect/jars
+      - CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE=false
+      - CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE=false 
+      - CONNECT_PLUGIN_PATH=/usr/share/java,/usr/share/confluent-hub-components
+    command: >
+      bash -c "confluent-hub install --no-prompt confluentinc/kafka-connect-elasticsearch:latest &&
+      confluent-hub install --no-prompt debezium/debezium-connector-mysql:latest &&
+      /etc/confluent/docker/run"
+    volumes:
+      - kafka-connect-data:/var/lib/kafka-connect
     networks:
       - cdc-network
 
@@ -122,9 +132,9 @@ networks:
     driver: bridge
 
 volumes:
-  cdc-mysql-data:
-    name: cdc-mysql-data
-    driver: local
-  cdc-kafka-data:
-    name: cdc-kafka-data
-    driver: local
+  mysql-data:
+  elasticsearch-data:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-data:
+  kafka-connect-data:
