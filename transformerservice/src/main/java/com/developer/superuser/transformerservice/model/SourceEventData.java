@@ -30,6 +30,7 @@ public class SourceEventData {
         private String country;
         private long createdAt;
         private long updatedAt;
+        private Long deletedAt;
         private String createdBy;
         private String updatedBy;
     }

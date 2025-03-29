@@ -23,6 +23,7 @@ public class SinkEventData {
     private String country;
     private long createdAt;
     private long updatedAt;
+    private Long deletedAt;
     private String createdBy;
     private String updatedBy;
     @JsonProperty("_metadata")
@@ -33,6 +34,7 @@ public class SinkEventData {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Metadata {
+        private boolean isDeleted;
         private String sourceTable;
         private String sourceDatabase;
         private String sourcePosition;
