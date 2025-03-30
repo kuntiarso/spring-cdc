@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class CustomerAdapterConfiguration {
+public class CustomerAdapterConfig {
     @Bean
     public CustomerService customerService(CustomerRepository customerRepository, ObjectMapper objectMapper) {
         return new CustomerServiceAdapter(customerRepository, objectMapper);

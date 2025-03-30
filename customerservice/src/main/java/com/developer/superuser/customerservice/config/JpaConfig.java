@@ -11,5 +11,5 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableJpaRepositories(basePackages = "com.developer.superuser", includeFilters = @ComponentScan.Filter(type = FilterType.REGEX, pattern = ".*Repository$"))
 @EnableTransactionManagement
 @EnableJpaAuditing
-public class JpaConfiguration {
+public class JpaConfig {
 }
