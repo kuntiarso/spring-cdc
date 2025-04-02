@@ -1,16 +1,13 @@
 package com.developer.superuser.customerservice.config;
 
 import com.developer.superuser.customerservice.CustomerserviceConstants;
-import com.developer.superuser.customerservice.batch.DbConnectionCheckTasklet;
-import com.developer.superuser.customerservice.batch.DbRecordCountTasklet;
-import com.developer.superuser.customerservice.batch.FileCleanupTasklet;
-import com.developer.superuser.customerservice.batch.JobCompletionListener;
+import com.developer.superuser.customerservice.batch.*;
 import com.developer.superuser.customerservice.customer.Customer;
 import com.developer.superuser.customerservice.customerresource.CustomerRequest;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
@@ -31,24 +28,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
 
 @Configuration
-@EnableBatchProcessing
-@RequiredArgsConstructor
+@Slf4j
 public class BatchConfig {
-    private final DataSource dataSource;
-    private final JobRepository jobRepository;
-    private final JdbcTemplate jdbcTemplate;
-    private final PlatformTransactionManager transactionManager;
-
-    private String tempFilePath;
-
-    @Value("#{jobParameters['tempFilePath']}")
-    public void setTempFilePath(String tempFilePath) {
-        this.tempFilePath = tempFilePath;
-    }
-
     @Bean
     @StepScope
-    public FlatFileItemReader<CustomerRequest.Customer> reader() {
+    public FlatFileItemReader<CustomerRequest.Customer> reader(@Value("#{jobParameters['tempFilePath']}") String tempFilePath) {
+        log.info("reader tempFilePath: {}", tempFilePath);
         return new FlatFileItemReaderBuilder<CustomerRequest.Customer>()
                 .name("customerItemReader")
                 .resource(new FileSystemResource(tempFilePath))
@@ -77,7 +62,7 @@ public class BatchConfig {
     }
 
     @Bean
-    public JdbcBatchItemWriter<Customer> writer() {
+    public JdbcBatchItemWriter<Customer> writer(DataSource dataSource) {
         return new JdbcBatchItemWriterBuilder<Customer>()
                 .sql(CustomerserviceConstants.BATCH_INSERT_QUERY)
                 .dataSource(dataSource)
@@ -86,45 +71,54 @@ public class BatchConfig {
     }
 
     @Bean
-    public Step insertCustomerStep() {
+    @JobScope
+    public Step insertCustomerStep(JobRepository jobRepository,
+                                   StepExecutionMonitor stepExecutionMonitor,
+                                   PlatformTransactionManager transactionManager,
+                                   FlatFileItemReader<CustomerRequest.Customer> reader,
+                                   ItemProcessor<CustomerRequest.Customer, Customer> processor,
+                                   JdbcBatchItemWriter<Customer> writer,
+                                   @Value("#{jobParameters['chunkSize']}") String chunkSize) {
+        log.info("insertCustomerStep chunkSize: {}", chunkSize);
         return new StepBuilder("insertCustomerStep", jobRepository)
-                .<CustomerRequest.Customer, Customer>chunk(10, transactionManager)
-                .reader(reader())
-                .processor(processor())
-                .writer(writer())
+                .listener(stepExecutionMonitor)
+                .<CustomerRequest.Customer, Customer>chunk(Integer.parseInt(chunkSize), transactionManager)
+                .reader(reader)
+                .processor(processor)
+                .writer(writer)
                 .build();
     }
 
     @Bean
-    public Step dbConnectionCheckStep() {
+    public Step dbConnectionCheckStep(JobRepository jobRepository, DataSource dataSource, PlatformTransactionManager transactionManager) {
         return new StepBuilder("dbConnectionCheckStep", jobRepository)
                 .tasklet(new DbConnectionCheckTasklet(dataSource), transactionManager)
                 .build();
     }
 
     @Bean
-    public Step dbRecordCountStep() {
+    public Step dbRecordCountStep(JobRepository jobRepository, JdbcTemplate jdbcTemplate, PlatformTransactionManager transactionManager) {
         return new StepBuilder("dbRecordCountStep", jobRepository)
                 .tasklet(new DbRecordCountTasklet(jdbcTemplate), transactionManager)
                 .build();
     }
 
     @Bean
-    public Step fileCleanupStep() {
+    public Step fileCleanupStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("fileCleanupStep", jobRepository)
                 .tasklet(new FileCleanupTasklet(), transactionManager)
                 .build();
     }
 
     @Bean
-    public Job customerBatchJob() {
+    public Job customerBatchJob(JobRepository jobRepository, JobExecutionMonitor jobExecutionMonitor, Step dbConnectionCheckStep, Step insertCustomerStep, Step dbRecordCountStep, Step fileCleanupStep) {
         return new JobBuilder("customerBatchJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
-                .listener(new JobCompletionListener())
-                .start(dbConnectionCheckStep())
-                .next(insertCustomerStep())
-                .next(dbRecordCountStep())
-                .next(fileCleanupStep())
+                .listener(jobExecutionMonitor)
+                .start(dbConnectionCheckStep)
+                .next(insertCustomerStep)
+                .next(dbRecordCountStep)
+                .next(fileCleanupStep)
                 .build();
     }
 }

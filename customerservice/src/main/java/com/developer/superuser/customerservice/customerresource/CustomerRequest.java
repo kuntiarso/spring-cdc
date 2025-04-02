@@ -5,11 +5,17 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CustomerRequest {
 
     @NotEmpty(message = "Request must have at least one customer data to proceed")
@@ -17,6 +23,9 @@ public class CustomerRequest {
     private List<Customer> customers;
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Customer {
         @NotEmpty(message = "First name is required")
         @Size(min = 2, max = 100, message = "First name must be between 2 and 100 characters")
